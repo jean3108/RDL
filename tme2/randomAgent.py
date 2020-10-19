@@ -1,6 +1,5 @@
 import matplotlib
 
-matplotlib.use("TkAgg")
 import gym
 import gridworld
 from gym import wrappers, logger

@@ -248,6 +248,7 @@ class NN(nn.Module):
             self.layers.append(nn.Linear(inSize, x))
             inSize = x
         self.layers.append(nn.Linear(inSize, outSize))
+        self.act = F.relu
 
     def setcuda(self, device):
         self.cuda(device=device)
@@ -255,10 +256,24 @@ class NN(nn.Module):
     def forward(self, x):
         x = self.layers[0](x)
         for i in range(1, len(self.layers)):
-            x = torch.tanh(x)
+            x = self.act(x)
             x = self.layers[i](x)
 
         return x
+
+class DQN(nn.Module):
+    """Dense neural network class."""
+    def __init__(self, num_inputs, num_actions):
+        super(DQN, self).__init__()
+        self.fc1 = nn.Linear(num_inputs, 32)
+        self.fc2 = nn.Linear(32, 32)
+        self.out = nn.Linear(32, num_actions)
+
+    def forward(self, states):
+        """Forward pass."""
+        x = F.relu(self.fc1(states))
+        x = F.relu(self.fc2(x))
+        return self.out(x)
 
 class LogMe(dict):
     def __init__(self,writer,term=True):

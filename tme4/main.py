@@ -6,6 +6,7 @@ import memory as mem
 import argparse
 import sys
 import matplotlib
+import matplotlib.pyplot as plt
 #matplotlib.use("Qt5agg")
 #matplotlib.use("TkAgg")
 import gym
@@ -15,7 +16,7 @@ from torch.utils.tensorboard import SummaryWriter
 import gridworld
 import torch
 from utils import *
-from DQNagent import DQNAgent, PolicyGradAgent
+from agents import DQNAgent, PolicyGradAgent
 
 
 
@@ -40,7 +41,7 @@ class RandomAgent(object):
         pass
 
 
-if __name__ == '__main__':
+def train(batch_size, target_step, dim_layers, num_layers, lr1, lr2, loss_num, mu, log=False, verb=False):
     #config = load_yaml('./configs/config_random_gridworld.yaml')
     config = load_yaml('./configs/config_random_cartpole.yaml')
     #config = load_yaml('./configs/config_random_lunar.yaml')
@@ -55,7 +56,7 @@ if __name__ == '__main__':
 
     tstart = str(time.time())
     tstart = tstart.replace(".", "_")
-    outdir = "./XP/" + config["env"] + "/DQN_NN_1_" + "-" + tstart
+    outdir = "./XP/" + config["env"] + "/Grid_actor_critic/" + "_bs" + str(batch_size) + "_ts" + str(target_step) + "_dim" +str(dim_layers) +"_num" +str(num_layers)+"_lr1"+str(lr1)+"_lr2"+str(lr2)+"_loss"+str(loss_num)+"_mu"+str(mu)+tstart
 
 
     env.seed(config["seed"])
@@ -64,18 +65,20 @@ if __name__ == '__main__':
 
     episode_count = config["nbEpisodes"]
     ob = env.reset()
-    agent_0 = RandomAgent(env,config)
-    agent_1 = DQNAgent(env,config)
-    agent_2 = PolicyGradAgent(env,config)
 
-    agent = agent_1
+    agent_0 = RandomAgent(env,config)
+    agent_1 = DQNAgent(env,config,episode_count, batch_size, target_step, dim_layers, num_layers)
+    agent_2 = PolicyGradAgent(env,config,episode_count, batch_size, target_step, dim_layers, num_layers, lr1, lr2, mu,loss_Func = loss_num)
+
+    agent = agent_2
 
     print("Saving in " + outdir)
     os.makedirs(outdir, exist_ok=True)
     save_src(os.path.abspath(outdir))
     write_yaml(os.path.join(outdir, 'info.yaml'), config)
-    logger = LogMe(SummaryWriter(outdir))
-    loadTensorBoard(outdir)
+    if log:
+        logger = LogMe(SummaryWriter(outdir))
+        loadTensorBoard(outdir)
 
     rsum = 0
     mean = 0
@@ -84,9 +87,11 @@ if __name__ == '__main__':
     reward = 0
     done = False
     cur_frame = 0
+    train_reward = []
+    test_reward = []
     for i in range(episode_count):
         if i % int(config["freqVerbose"]) == 0 and i >= config["freqVerbose"]:
-            verbose = True
+            verbose = verb
         else:
             verbose = False
 
@@ -98,7 +103,9 @@ if __name__ == '__main__':
         if i % freqTest == nbTest and i > freqTest:
             #print("End of test, mean reward=", mean / nbTest)
             itest += 1
-            logger.direct_write("rewardTest", mean / nbTest, itest)
+            if log:
+                logger.direct_write("rewardTest", mean / nbTest, itest)
+            test_reward.append(mean / nbTest)
             agent.test = False
 
         if i % freqSave == 0:
@@ -120,7 +127,9 @@ if __name__ == '__main__':
             rsum += reward
             if done:
                 #print(str(i) + " rsum=" + str(rsum) + ", " + str(j) + " actions ")
-                logger.direct_write("reward", rsum, i)
+                if log:
+                    logger.direct_write("reward", rsum, i)
+                train_reward.append(rsum)
                 agent.nbEvents = 0
                 mean += rsum
                 rsum = 0
@@ -128,3 +137,59 @@ if __name__ == '__main__':
                 break
 
     env.close()
+    train_rg = np.arange(len(train_reward))
+    test_rg = np.arange(len(test_reward))
+    fig, ax = plt.subplots(1,2, figsize=(10,5))
+    ax[0].plot(train_rg,train_reward)
+    ax[1].plot(test_rg,test_reward)
+    fig.savefig(outdir+ "/reward.png")
+    plt.close(fig)
+
+    return sum(test_reward)
+
+
+
+# Grid Search
+GRID = False
+
+if GRID:
+    batch_l = [100]
+    #target_l = [100,500,1000]
+    dim_layers = [64]
+    num_layers = [2]
+    lr1, lr2 = [1e-4], [1e-4]
+    mu = [20,30,40]
+
+    max_reward = 0
+
+    for b in batch_l:
+        for d in dim_layers:
+            for n in num_layers:
+                for l1 in lr1:
+                    for l2 in lr2:
+                        for m in mu:
+                            #d,n,l1,l2 = 32,1,1e-3,1e-3
+                            l = 0 # MSELoss
+                            t=1
+                            print(f"batch{b}_dim{d}_num{n}_l1{l1}_l2{l2}_l{l}\n")
+                            rcum = train(b, t, d, n, l1, l2, l,m,log=False,verb=False)
+                            if rcum > max_reward:
+                                max_reward = rcum
+                                best_params = {"batch" : b, "dim":d,"num":n,"l1":l1,"l2": l2,"mu":m}
+                                
+                            print("-"*20)
+                            print("best_params\n", best_params)
+                            print("max reward cum :", max_reward)
+
+else:
+    # Hyper param
+
+    batch_size = 100
+    target_step = 1000 # Pas utile pour actor critic -> changement de target à chaque optim
+    dim_layers = 64
+    num_layers = 2
+    lr1, lr2 = 1e-3, 1e-3
+    loss_num = 0
+    mu = 30
+
+    train(batch_size, target_step, dim_layers, num_layers, lr1, lr2, loss_num,mu,log=True,verb=True)

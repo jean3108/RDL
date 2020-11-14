@@ -270,7 +270,8 @@ class Policy_NN(nn.Module):
             inSize = x
         self.layers.append(nn.Linear(inSize, outSize))
         self.act = F.relu
-        self.log = nn.LogSoftmax(dim=-1)
+        self.log_proba = nn.LogSoftmax(dim=-1)
+        self.proba = nn.Softmax(dim=-1)
 
     def setcuda(self, device):
         self.cuda(device=device)
@@ -280,8 +281,9 @@ class Policy_NN(nn.Module):
         for i in range(1, len(self.layers)):
             x = self.act(x)
             x = self.layers[i](x)
-        x = self.log(x)
-        return x
+        #log_proba = self.log_proba(x)
+        proba = self.proba(x)
+        return proba
 
 class Policy_NN_2(nn.Module):
     def __init__(self, inSize, outSize, dim = 128):

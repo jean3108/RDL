@@ -8,6 +8,7 @@ import memory as mem
 import torch
 import pandas as pd
 import torch.nn.functional as F
+from torch.distributions import Categorical
 
 
 
@@ -115,7 +116,7 @@ class DQNAgent(object):
 class PolicyGradAgent(object):
     """Policy Gradient agent"""
 
-    def __init__(self, env, opt, episodes, batch_size, target_step, dim_layers, num_layers, lr1, lr2, mu, test = False, loss_Func = 0):
+    def __init__(self, env, opt, episodes, batch_size, target_step, dim_layers, num_layers, lr1, lr2, mu=10, test = False, loss_Func = 0):
         self.nb_episodes = episodes
         self.opt = opt
         self.env = env
@@ -145,18 +146,14 @@ class PolicyGradAgent(object):
         self.alpha = 0.1
         self.gamma = 0.99
         self.epsilon0 = 1
+        self.opti_count = 0
         self.mu = mu/self.nb_episodes
 
     def act(self, observation, reward, frame, episode, done):
 
-        # Qtarget update
-        #if frame % self.targetStep == 0:
-            #self.setTarget(self.vpi) 
-
-        
         # Initialisation
         observation = torch.tensor(self.featureExtractor.getFeatures(observation), dtype=torch.float)
-        probas = self.policy(observation)
+        probas = Categorical(self.policy(observation))
         #probas, _ = self.net(observation)
 
         if self.old_state == None:
@@ -167,13 +164,7 @@ class PolicyGradAgent(object):
             
             return action
 
-        # epsilon greedy
-        eps = self.epsilon0 / (1 + self.mu * episode)
-        if np.random.rand() > eps or self.test == True:
-            action = int(torch.argmax(probas))
-
-        else:
-            action = self.env.action_space.sample()
+        action = int(probas.sample())
 
         # Remplissage du buffer
         self.buffer.add(self.old_state, self.old_act, reward, observation, done)
@@ -191,7 +182,10 @@ class PolicyGradAgent(object):
 
             # 1) compute expectation
             action_masks = F.one_hot(actions, self.env.action_space.n)
-            masked_log_proba = (action_masks * self.policy(states)).sum(dim=-1)
+            log_probas = torch.log(self.policy(states))
+            #log_prob = probas.log_prob()
+            #import ipdb; ipdb.set_trace()
+            masked_log_proba = (action_masks * log_probas).sum(dim=-1)
             actor_loss = torch.sum(masked_log_proba*advantage.detach()) 
 
             # 2) back propagation
@@ -211,7 +205,9 @@ class PolicyGradAgent(object):
             self.optim.step()
             self.optim.zero_grad()
             """
-            self.setTarget(self.vpi)
+            if self.opti_count % self.targetStep == 0:
+                self.setTarget(self.vpi)
+            self.opti_count += 1
             self.resetBuffer() # reset buffer to sample with next step policy
 
         # Update state and action
@@ -232,30 +228,6 @@ class PolicyGradAgent(object):
         loss_vpi = self.lossFunc(vpi, target.detach())
 
         return loss_vpi
-
-    def train_step(self,states, actions, rewards, next_states, dones):
-        """Perform a training iteration on a batch of data sampled from the experience
-        replay buffer.
-        """
-        
-        log_proba, vpi = self.net(states)
-
-        # Critic loss.
-        with torch.no_grad():
-            _, next_vpi = self.net(next_states)
-            target = rewards + (1.0 - dones) * self.gamma * next_vpi.squeeze()
-        loss_vpi = self.lossFunc(vpi.squeeze(), target.detach())
-        A = rewards + (1.0 - dones) * self.gamma * next_vpi.squeeze() - vpi.squeeze()
-
-        # Actor loss
-        action_masks = F.one_hot(actions, self.env.action_space.n)
-        masked_log_proba = (action_masks * log_proba).sum(dim=-1)
-        loss_policy = torch.sum(masked_log_proba*A)
-
-        loss = loss_vpi + loss_policy
-
-        return loss
-
 
     def setTarget(self, target):
         self.vpiTarget = copy.deepcopy(target)

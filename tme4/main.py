@@ -56,7 +56,7 @@ def train(batch_size, target_step, dim_layers, num_layers, lr1, lr2, loss_num, m
 
     tstart = str(time.time())
     tstart = tstart.replace(".", "_")
-    outdir = "./XP/" + config["env"] + "/Grid_actor_critic/" + "_bs" + str(batch_size) + "_ts" + str(target_step) + "_dim" +str(dim_layers) +"_num" +str(num_layers)+"_lr1"+str(lr1)+"_lr2"+str(lr2)+"_loss"+str(loss_num)+"_mu"+str(mu)+tstart
+    outdir = "./XP/" + config["env"] + "/Grid_actor_critic/" + "_bs" + str(batch_size) + "_dim" +str(dim_layers) +"_num" +str(num_layers)+"_lr1"+str(lr1)+"_lr2"+str(lr2)+"_loss"+str(loss_num)+tstart
 
 
     env.seed(config["seed"])
@@ -153,23 +153,22 @@ def train(batch_size, target_step, dim_layers, num_layers, lr1, lr2, loss_num, m
 GRID = False
 
 if GRID:
-    batch_l = [100]
-    #target_l = [100,500,1000]
-    dim_layers = [64]
-    num_layers = [2]
-    lr1, lr2 = [1e-4], [1e-4]
-    mu = [20,30,40]
-
+    batch_l = [20,50,100,200,500]
+    dim_layers = [32,64,128]
+    num_layers = [1,2,3]
+    lr1, lr2 = [1e-3, 1e-4], [1e-3,1e-4]
+    #mu = [20,30,40]
+    loss = [0,1]
+    out = open("out.txt", "a")
     max_reward = 0
-
     for b in batch_l:
         for d in dim_layers:
             for n in num_layers:
                 for l1 in lr1:
                     for l2 in lr2:
-                        for m in mu:
+                        for l in loss:
                             #d,n,l1,l2 = 32,1,1e-3,1e-3
-                            l = 0 # MSELoss
+                            m = 10 # MSELoss
                             t=1
                             print(f"batch{b}_dim{d}_num{n}_l1{l1}_l2{l2}_l{l}\n")
                             rcum = train(b, t, d, n, l1, l2, l,m,log=False,verb=False)
@@ -181,15 +180,20 @@ if GRID:
                             print("best_params\n", best_params)
                             print("max reward cum :", max_reward)
 
+    out.write("Best params :",best_params)
+    out.close()
+
 else:
     # Hyper param
 
     batch_size = 100
-    target_step = 1000 # Pas utile pour actor critic -> changement de target à chaque optim
-    dim_layers = 64
+    target_step = 1 # Pas utile pour actor critic -> changement de target à chaque optim
+    dim_layers = 32
     num_layers = 2
-    lr1, lr2 = 1e-3, 1e-3
-    loss_num = 0
+    lr1, lr2 = 1e-4, 1e-3
+    loss_num = 1
     mu = 30
 
-    train(batch_size, target_step, dim_layers, num_layers, lr1, lr2, loss_num,mu,log=True,verb=True)
+    rcum = train(batch_size, target_step, dim_layers, num_layers, lr1, lr2, loss_num, mu,log=True,verb=False)
+    print("-"*20)
+    print(f"\nreward cum :{rcum}")

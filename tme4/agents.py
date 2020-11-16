@@ -41,6 +41,7 @@ class DQNAgent(object):
         self.gamma = 0.99
         self.epsilon0 = 1
         self.mu = 10/self.nb_episodes
+        
 
     def act(self, observation, reward, frame, episode, done):
         # Qtarget update
@@ -114,9 +115,10 @@ class DQNAgent(object):
 
 
 class PolicyGradAgent(object):
-    """Policy Gradient agent"""
+    """Policy Gradient agent -> Actor critic or PPO"""
 
-    def __init__(self, env, opt, episodes, batch_size, target_step, dim_layers, num_layers, lr1, lr2, mu=10, test = False, loss_Func = 0):
+    def __init__(self, env, opt, episodes, batch_size, target_step, dim_layers, num_layers, lr1, lr2, mu=10, test = False, loss_Func = 0, mode = 'actor-critic'):
+        self.mode = mode
         self.nb_episodes = episodes
         self.opt = opt
         self.env = env
@@ -133,6 +135,7 @@ class PolicyGradAgent(object):
         self.test = test
         self.old_state = None
         self.old_act = None
+        self.old_prob = None
         self.action_space = env.action_space
         self.featureExtractor = opt.featExtractor(env)
         self.vpi = ut.NN(self.featureExtractor.outSize, 1, [dim_layers for i in range(num_layers)]) # state value
@@ -148,6 +151,7 @@ class PolicyGradAgent(object):
         self.epsilon0 = 1
         self.opti_count = 0
         self.mu = mu/self.nb_episodes
+        self.eps_clip = 0.2
 
     def act(self, observation, reward, frame, episode, done):
 
@@ -176,18 +180,30 @@ class PolicyGradAgent(object):
             critic_loss = self.train_step_vpi(states, actions, rewards, next_states, dones)
             
             # Campute advantage
-            advantage = rewards + (1.0 - dones) * self.gamma * self.vpi(next_states).squeeze() - self.vpi(states).squeeze()
+            advantages = rewards + (1.0 - dones) * self.gamma * self.vpi(next_states).squeeze() - self.vpi(states).squeeze()
 
             # Compute reward expectation gradient
 
             # 1) compute expectation
             action_masks = F.one_hot(actions, self.env.action_space.n)
-            log_probas = torch.log(self.policy(states))
+            probas = self.policy(states)
             #log_prob = probas.log_prob()
             #import ipdb; ipdb.set_trace()
-            masked_log_proba = (action_masks * log_probas).sum(dim=-1)
-            actor_loss = torch.sum(masked_log_proba*advantage.detach()) 
+            if self.mode == "actor-critic":
+                masked_log_proba = (action_masks * torch.log(probas)).sum(dim=-1)
+                actor_loss = torch.sum(masked_log_proba*advantages.detach())
 
+            elif self.mode == "PPO":
+                if self.old_prob == None:
+                    masked_ratios = torch.ones(self.batch_size)
+                else:
+                    ratios = probas / self.old_prob.detach()
+                    masked_ratios = (action_masks * ratios).sum(dim=-1)
+                t1 = masked_ratios * advantages
+                t2 = torch.clamp(masked_ratios, 1-self.eps_clip, 1+self.eps_clip) * advantages
+                actor_loss = torch.sum(torch.min(t1,t2))
+
+            #import ipdb; ipdb.set_trace()
             # 2) back propagation
             
 
@@ -209,6 +225,7 @@ class PolicyGradAgent(object):
                 self.setTarget(self.vpi)
             self.opti_count += 1
             self.resetBuffer() # reset buffer to sample with next step policy
+            self.old_prob = probas
 
         # Update state and action
         self.old_state = observation

@@ -68,7 +68,9 @@ def train(batch_size, target_step, dim_layers, num_layers, lr1, lr2, loss_num, m
 
     agent_0 = RandomAgent(env,config)
     agent_1 = DQNAgent(env,config,episode_count, batch_size, target_step, dim_layers, num_layers)
-    agent_2 = PolicyGradAgent(env,config,episode_count, batch_size, target_step, dim_layers, num_layers, lr1, lr2, mu,loss_Func = loss_num)
+
+    mode = 'PPO' # policy gradient mode ('PPO' ou 'actor-critic')
+    agent_2 = PolicyGradAgent(env,config,episode_count, batch_size, target_step, dim_layers, num_layers, lr1, lr2, mu,loss_Func = loss_num, mode = mode)
 
     agent = agent_2
 
@@ -186,14 +188,14 @@ if GRID:
 else:
     # Hyper param
 
-    batch_size = 100
+    batch_size = 150
     target_step = 1 # Pas utile pour actor critic -> changement de target à chaque optim
-    dim_layers = 32
-    num_layers = 2
-    lr1, lr2 = 1e-4, 1e-3
+    dim_layers = 64
+    num_layers = 3
+    lr1, lr2 = 1e-3, 1e-3
     loss_num = 1
     mu = 30
 
-    rcum = train(batch_size, target_step, dim_layers, num_layers, lr1, lr2, loss_num, mu,log=True,verb=False)
+    rcum = train(batch_size, target_step, dim_layers, num_layers, lr1, lr2, loss_num, mu,log=True,verb=True)
     print("-"*20)
     print(f"\nreward cum :{rcum}")

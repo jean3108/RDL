@@ -249,6 +249,7 @@ class NN(nn.Module):
             inSize = x
         self.layers.append(nn.Linear(inSize, outSize))
         self.act = F.relu
+        self.act2 = torch.tanh
 
     def setcuda(self, device):
         self.cuda(device=device)
@@ -270,6 +271,7 @@ class Policy_NN(nn.Module):
             inSize = x
         self.layers.append(nn.Linear(inSize, outSize))
         self.act = F.relu
+        self.act2 = torch.tanh
         self.log_proba = nn.LogSoftmax(dim=-1)
         self.proba = nn.Softmax(dim=-1)
 

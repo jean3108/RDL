@@ -3,37 +3,60 @@ from collections import deque
 import torch
 
 class ReplayBuffer(object):
-  """Experience replay buffer that samples uniformly."""
-  def __init__(self, size, device="cpu"):
-    """Initializes the buffer."""
-    self.buffer = deque(maxlen=size)
-    self.device = device
+    """Experience replay buffer that samples uniformly."""
+    def __init__(self, size, device="cpu"):
+        """Initializes the buffer."""
+        self.buffer = deque(maxlen=size)
+        self.device = device
+        self.perm = None
+        self.rewards = None
+        self.dones = None
 
-  def add(self, state, action, reward, next_state, done):
-    self.buffer.append((state, action, reward, next_state, done))
+    def add(self, state, action, reward, next_state, done, succes):
+        self.buffer.append((state, action, reward, next_state, done, succes))
 
-  def __len__(self):
-    return len(self.buffer)
+    def __len__(self):
+        return len(self.buffer)
 
-  def sample(self, num_samples):
-    states, actions, rewards, next_states, dones = [], [], [], [], []
-    idx = np.random.choice(len(self.buffer), num_samples)
-    for i in idx:
-      elem = self.buffer[i]
-      state, action, reward, next_state, done = elem
-      states.append(np.array(state, copy=False))
-      actions.append(np.array(action, copy=False))
-      rewards.append(reward)
-      next_states.append(np.array(next_state, copy=False))
-      dones.append(done)
+    def sample(self, num_samples):
+        states, actions, rewards, next_states, dones, succes = [], [], [], [], [], []
+        #idx = np.random.choice(len(self.buffer), num_samples)
+        idx = np.arange(len(self.buffer))
+        self.perm = idx
+        
+        for elem in self.buffer:
+            #elem = self.buffer[i]
+            state, action, reward, next_state, done, succ = elem
+            states.append(np.array(state, copy=False))
+            actions.append(np.array(action, copy=False))
+            rewards.append(reward)
+            next_states.append(np.array(next_state, copy=False))
+            dones.append(done)
+            succes.append(succ)
+        
+        states = torch.as_tensor(np.array(states), device=self.device)
+        actions = torch.as_tensor(np.array(actions), device=self.device)
+        self.rewards = torch.as_tensor(np.array(rewards, dtype=np.float32), device=self.device)
+        next_states = torch.as_tensor(np.array(next_states), device=self.device)
+        self.dones = torch.as_tensor(np.array(dones, dtype=np.float32), device=self.device)
+        succes = torch.as_tensor(np.array(succes, dtype=np.float32), device=self.device)
 
-    states = torch.as_tensor(np.array(states), device=self.device)
-    actions = torch.as_tensor(np.array(actions), device=self.device)
-    rewards = torch.as_tensor(np.array(rewards, dtype=np.float32), device=self.device)
-    next_states = torch.as_tensor(np.array(next_states), device=self.device)
-    dones = torch.as_tensor(np.array(dones, dtype=np.float32), device=self.device)
+        #import ipdb; ipdb.set_trace()
 
-    return states, actions, rewards, next_states, dones
+        return states[idx], actions[idx], self.rewards[idx], next_states[idx], self.dones[idx], succes[idx]
+
+
+    def monte_carlo_sample(self,gamma):
+        rewards = []
+        discounted_reward = 0
+        for reward, done in zip(reversed(self.rewards), reversed(self.dones)):
+            if done:
+                discounted_reward = 0
+            discounted_reward = reward + (gamma * discounted_reward)
+            rewards.insert(0, discounted_reward)
+        rewards = torch.tensor(rewards, dtype=torch.float32).to(self.device)
+        #rewards = (rewards - rewards.mean()) / (rewards.std() + 1e-5)
+        return rewards[self.perm]
 
 class SumTree:
     def __init__(self, mem_size):

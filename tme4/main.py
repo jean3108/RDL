@@ -41,7 +41,7 @@ class RandomAgent(object):
         pass
 
 
-def train(batch_size, target_step, dim_layers, num_layers, lr1, lr2, loss_num, mu, log=False, verb=False):
+def train(batch_size, target_step, dim_layers, num_layers, lr1, lr2, loss_num, mu, log=False, verb=False, mode = 'actor-critic'):
     #config = load_yaml('./configs/config_random_gridworld.yaml')
     config = load_yaml('./configs/config_random_cartpole.yaml')
     #config = load_yaml('./configs/config_random_lunar.yaml')
@@ -68,8 +68,6 @@ def train(batch_size, target_step, dim_layers, num_layers, lr1, lr2, loss_num, m
 
     agent_0 = RandomAgent(env,config)
     agent_1 = DQNAgent(env,config,episode_count, batch_size, target_step, dim_layers, num_layers)
-
-    mode = 'PPO' # policy gradient mode ('PPO' ou 'actor-critic')
     agent_2 = PolicyGradAgent(env,config,episode_count, batch_size, target_step, dim_layers, num_layers, lr1, lr2, mu,loss_Func = loss_num, mode = mode)
 
     agent = agent_2
@@ -88,6 +86,7 @@ def train(batch_size, target_step, dim_layers, num_layers, lr1, lr2, loss_num, m
     itest = 0
     reward = 0
     done = False
+    info = False
     cur_frame = 0
     train_reward = []
     test_reward = []
@@ -120,9 +119,9 @@ def train(batch_size, target_step, dim_layers, num_layers, lr1, lr2, loss_num, m
         while True:
             if verbose:
                 env.render()
-
-            action = agent.act(ob, reward, cur_frame, i, done)
-            ob, reward, done, _ = env.step(action)
+            action = agent.act(ob, reward, cur_frame, i, done, False)
+            ob, reward, done, info = env.step(action)
+            #import ipdb; ipdb.set_trace()
             cur_frame+=1
             j+=1
 
@@ -132,6 +131,7 @@ def train(batch_size, target_step, dim_layers, num_layers, lr1, lr2, loss_num, m
                 if log:
                     logger.direct_write("reward", rsum, i)
                 train_reward.append(rsum)
+                agent.old_state = None
                 agent.nbEvents = 0
                 mean += rsum
                 rsum = 0
@@ -188,14 +188,15 @@ if GRID:
 else:
     # Hyper param
 
-    batch_size = 150
-    target_step = 1 # Pas utile pour actor critic -> changement de target à chaque optim
+    batch_size = 300
+    target_step = 1
     dim_layers = 64
     num_layers = 3
-    lr1, lr2 = 1e-3, 1e-3
+    lr1, lr2 = 1e-4, 1e-4
     loss_num = 1
     mu = 30
 
-    rcum = train(batch_size, target_step, dim_layers, num_layers, lr1, lr2, loss_num, mu,log=True,verb=True)
+    mode_pg = 'PPO'
+    rcum = train(batch_size, target_step, dim_layers, num_layers, lr1, lr2, loss_num, mu,log=True,verb=False,mode=mode_pg)
     print("-"*20)
     print(f"\nreward cum :{rcum}")

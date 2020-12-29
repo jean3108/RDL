@@ -249,7 +249,7 @@ class NN(nn.Module):
             inSize = x
         self.layers.append(nn.Linear(inSize, outSize))
         self.act = F.relu
-        self.act2 = torch.tanh
+        self.act2 = nn.Tanh()
 
     def setcuda(self, device):
         self.cuda(device=device)
@@ -271,7 +271,7 @@ class Policy_NN(nn.Module):
             inSize = x
         self.layers.append(nn.Linear(inSize, outSize))
         self.act = F.relu
-        self.act2 = torch.tanh
+        self.norm = nn.BatchNorm1d(layers[0])
         self.log_proba = nn.LogSoftmax(dim=-1)
         self.proba = nn.Softmax(dim=-1)
 
@@ -282,35 +282,13 @@ class Policy_NN(nn.Module):
         x = self.layers[0](x)
         for i in range(1, len(self.layers)):
             x = self.act(x)
+            if len(x.shape) > 1:
+                x = self.norm(x)
             x = self.layers[i](x)
         #log_proba = self.log_proba(x)
         proba = self.proba(x)
         return proba
 
-class Policy_NN_2(nn.Module):
-    def __init__(self, inSize, outSize, dim = 128):
-        super(Policy_NN_2, self).__init__()
-        self.affine = nn.Linear(inSize,dim)
-        # Actor
-        self.actor = nn.Linear(dim, outSize)
-        # Critic
-        self.critic = nn.Linear(dim, 1)
-        self.act = nn.ReLU()
-        self.log = nn.LogSoftmax()
-
-    def setcuda(self, device):
-        self.cuda(device=device)
-
-    def forward(self, x):
-        X = self.act(self.affine(x))
-
-        # Actor : proba of each action
-        log_proba = self.log(self.actor(X))
-
-        # Critic : evaluate state values
-        state_values = self.critic(X)
-
-        return log_proba, state_values
 
 class DQN(nn.Module):
     """Dense neural network class."""

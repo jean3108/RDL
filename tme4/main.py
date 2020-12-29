@@ -16,7 +16,8 @@ from torch.utils.tensorboard import SummaryWriter
 import gridworld
 import torch
 from utils import *
-from agents import DQNAgent, PolicyGradAgent
+from agents import DQNAgent, PolicyGradAgent, DDPG
+torch.autograd.set_detect_anomaly(True)
 
 
 
@@ -65,12 +66,12 @@ def train(batch_size, target_step, dim_layers, num_layers, lr1, lr2, loss_num, m
 
     episode_count = config["nbEpisodes"]
     ob = env.reset()
-
     agent_0 = RandomAgent(env,config)
-    agent_1 = DQNAgent(env,config,episode_count, batch_size, target_step, dim_layers, num_layers)
-    agent_2 = PolicyGradAgent(env,config,episode_count, batch_size, target_step, dim_layers, num_layers, lr1, lr2, mu,loss_Func = loss_num, mode = mode)
+    #agent_1 = DQNAgent(env,config,episode_count, batch_size, target_step, dim_layers, num_layers)
+    #agent_2 = PolicyGradAgent(env,config,episode_count, batch_size, target_step, dim_layers, num_layers, lr1, lr2, mu,loss_Func = loss_num, mode = mode)
+    agent_3 = DDPG(env,config,episode_count, batch_size, target_step, dim_layers, num_layers)
 
-    agent = agent_2
+    agent = agent_3
 
     print("Saving in " + outdir)
     os.makedirs(outdir, exist_ok=True)
@@ -86,7 +87,7 @@ def train(batch_size, target_step, dim_layers, num_layers, lr1, lr2, loss_num, m
     itest = 0
     reward = 0
     done = False
-    info = False
+    succes = False
     cur_frame = 0
     train_reward = []
     test_reward = []
@@ -119,17 +120,28 @@ def train(batch_size, target_step, dim_layers, num_layers, lr1, lr2, loss_num, m
         while True:
             if verbose:
                 env.render()
-            action = agent.act(ob, reward, cur_frame, i, done, False)
+            
+            action = agent.act(ob, reward, cur_frame, i, done, succes) # take a step
             ob, reward, done, info = env.step(action)
-            #import ipdb; ipdb.set_trace()
+            succes = info.get("TimeLimit.truncated",False)
+
             cur_frame+=1
             j+=1
-
             rsum += reward
             if done:
                 #print(str(i) + " rsum=" + str(rsum) + ", " + str(j) + " actions ")
                 if log:
                     logger.direct_write("reward", rsum, i)
+
+                    # Get losses
+                    """
+                    if agent.loss_computed == True:
+                        act_loss, critic_loss = agent.getLosses() 
+                        logger.direct_write("actor_loss", act_loss, i)
+                        if critic_loss != None:
+                            logger.direct_write("critic_loss", critic_loss, i)
+                            """
+
                 train_reward.append(rsum)
                 agent.old_state = None
                 agent.nbEvents = 0
@@ -185,18 +197,19 @@ if GRID:
     out.write("Best params :",best_params)
     out.close()
 
+# Simple mode
 else:
     # Hyper param
 
     batch_size = 300
     target_step = 1
-    dim_layers = 64
-    num_layers = 3
-    lr1, lr2 = 1e-4, 1e-4
+    dim_layers = 30
+    num_layers = 2
+    lr1, lr2 = 1e-3, 1e-3 # Losses of respct. critic and actor
     loss_num = 1
-    mu = 30
+    mu = 30 # use in DQN
 
-    mode_pg = 'PPO'
-    rcum = train(batch_size, target_step, dim_layers, num_layers, lr1, lr2, loss_num, mu,log=True,verb=False,mode=mode_pg)
+    mode_pg = 'PPO'  # "actor-critic" or "PPO"
+    rcum = train(batch_size, target_step, dim_layers, num_layers, lr1, lr2, loss_num, mu,log=True,verb=True,mode=mode_pg)
     print("-"*20)
     print(f"\nreward cum :{rcum}")

@@ -20,8 +20,8 @@ class ReplayBuffer(object):
 
     def sample(self, num_samples):
         states, actions, rewards, next_states, dones, succes = [], [], [], [], [], []
-        #idx = np.random.choice(len(self.buffer), num_samples)
-        idx = np.arange(len(self.buffer))
+        idx = np.random.choice(len(self.buffer), num_samples)
+        #idx = np.arange(len(self.buffer))
         self.perm = idx
         
         for elem in self.buffer:
